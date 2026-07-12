@@ -3,8 +3,7 @@
 // El navegador nunca ve la API key: solo este servidor la usa.
 
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
-const MODEL = "gemini-3.5-flash"; // cámbialo a "gemini-flash-lite-latest" si necesitas más cupo gratis por día
-
+const MODEL = "gemini-flash-lite-latest"; // más cupo gratis por minuto que gemini-3.5-flash, respuestas un poco más simples
 // -----------------------------------------------------------------------
 // Aquí va el "conocimiento" del bot. Edita este texto con la info curada
 // de institutos, universidades, carreras y becas que ya tienes armada
