@@ -151,6 +151,38 @@
     border-bottom-right-radius:4px;
   }
 
+  .sources{
+    margin-top:10px;
+    padding-top:9px;
+    border-top:1px solid #DDE6D9;
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    align-items:center;
+  }
+  .sources-label{
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-right:2px;
+  }
+  .sources a{
+    font-size:12px;
+    color:var(--gold-deep);
+    background:#FBF3E2;
+    border:1px solid #EBD9AE;
+    border-radius:999px;
+    padding:4px 10px;
+    text-decoration:none;
+    max-width:180px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .sources a:hover{ text-decoration:underline; }
+
   .typing{display:flex; gap:4px; padding:4px 2px;}
   .typing span{
     width:6px;height:6px;border-radius:50%;
@@ -269,7 +301,7 @@
   }
   input.addEventListener('input', autoGrow);
 
-  function addMessage(role, text){
+  function addMessage(role, text, sources){
     const wrap = document.createElement('div');
     wrap.className = 'msg ' + role;
     const avatar = document.createElement('div');
@@ -280,6 +312,25 @@
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     bubble.textContent = text;
+
+    if (sources && sources.length){
+      const srcWrap = document.createElement('div');
+      srcWrap.className = 'sources';
+      const label = document.createElement('div');
+      label.className = 'sources-label';
+      label.textContent = 'Fuentes';
+      srcWrap.appendChild(label);
+      sources.slice(0, 4).forEach((s) => {
+        const a = document.createElement('a');
+        a.href = s.uri;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = s.title;
+        srcWrap.appendChild(a);
+      });
+      bubble.appendChild(srcWrap);
+    }
+
     wrap.appendChild(avatar);
     wrap.appendChild(bubble);
     main.appendChild(wrap);
@@ -323,7 +374,7 @@
         addMessage('bot', data.error || 'Algo salió mal. Intenta de nuevo.');
       } else {
         previousInteractionId = data.interactionId || previousInteractionId;
-        addMessage('bot', data.text);
+        addMessage('bot', data.text, data.sources);
       }
     } catch (err) {
       removeTyping();
