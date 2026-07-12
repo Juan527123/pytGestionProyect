@@ -34,4 +34,118 @@ Cómo respondes:
   dato confiable, no inventes cifras: da el panorama general y recomienda
   verificar en la fuente oficial (Pronabec, Sunedu, Minedu, o la página de
   la institución).
-- Si preguntan algo fuera de este tema, redirige con
+- Si preguntan algo fuera de este tema, redirige con amabilidad hacia tu
+  propósito: ayudarles a decidir su camino después del colegio.
+- No reemplazas a un asesor vocacional certificado ni das asesoría legal o
+  financiera definitiva. Para decisiones grandes (firmar un contrato, pedir
+  un préstamo educativo), sugiere revisarlo con un adulto de confianza.
+`.trim();
+
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Método no permitido" });
+    return;
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({ error: "Falta configurar GEMINI_API_KEY en Vercel." });
+    return;
+  }
+
+  const { message, previousInteractionId } = req.body || {};
+
+  if (!message || typeof message !== "string" || !message.trim()) {
+    res.status(400).json({ error: "Falta el mensaje." });
+    return;
+  }
+  if (message.length > 2000) {
+    res.status(400).json({ error: "Mensaje demasiado largo." });
+    return;
+  }
+
+  const payload = {
+    model: MODEL,
+    system_instruction: SYSTEM_PROMPT,
+    input: message,
+    generation_config: { temperature: 0.6 },
+    tools: [{ type: "google_search" }],
+  };
+  if (previousInteractionId) {
+    payload.previous_interaction_id = previousInteractionId;
+  }
+
+  try {
+    const geminiRes = await fetch(GEMINI_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+        "Api-Revision": "2026-05-20",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text();
+      console.error("Gemini error:", geminiRes.status, errText);
+      if (geminiRes.status === 429) {
+        res.status(429).json({
+          error: "Muchas personas usando el bot ahora mismo. Intenta en un momento.",
+        });
+        return;
+      }
+      res.status(502).json({ error: "El bot no pudo responder. Intenta de nuevo." });
+      return;
+    }
+
+    const data = await geminiRes.json();
+    const text = extractText(data);
+    const sources = extractSources(data);
+
+    res.status(200).json({
+      text: text || "No pude generar una respuesta, intenta reformular tu pregunta.",
+      interactionId: data.id,
+      sources,
+    });
+  } catch (err) {
+    console.error("Error llamando a Gemini:", err);
+    res.status(500).json({ error: "Error de conexión con el bot." });
+  }
+};
+
+// La respuesta de la API viene como una lista de "steps" (pasos), no como
+// un solo texto plano. Buscamos el último paso de tipo "model_output" y
+// juntamos sus bloques de texto.
+function extractText(data) {
+  if (!data || !Array.isArray(data.steps)) return "";
+  const outputSteps = data.steps.filter((s) => s.type === "model_output");
+  const lastOutput = outputSteps[outputSteps.length - 1];
+  if (!lastOutput || !Array.isArray(lastOutput.content)) return "";
+  return lastOutput.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("");
+}
+
+// Cuando el bot busca en Google, el texto de la respuesta trae "annotations"
+// con los links de las páginas que usó. Los juntamos y quitamos duplicados.
+function extractSources(data) {
+  if (!data || !Array.isArray(data.steps)) return [];
+  const outputSteps = data.steps.filter((s) => s.type === "model_output");
+  const lastOutput = outputSteps[outputSteps.length - 1];
+  if (!lastOutput || !Array.isArray(lastOutput.content)) return [];
+
+  const seen = new Set();
+  const sources = [];
+  for (const block of lastOutput.content) {
+    if (!Array.isArray(block.annotations)) continue;
+    for (const a of block.annotations) {
+      if (a.uri && !seen.has(a.uri)) {
+        seen.add(a.uri);
+        sources.push({ uri: a.uri, title: a.title || a.uri });
+      }
+    }
+  }
+  return sources;
+}
