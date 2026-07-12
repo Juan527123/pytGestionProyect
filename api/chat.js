@@ -78,6 +78,7 @@ module.exports = async function handler(req, res) {
       headers: {
         "Content-Type": "application/json",
         "x-goog-api-key": apiKey,
+        "Api-Revision": "2026-05-20",
       },
       body: JSON.stringify(payload),
     });
@@ -96,8 +97,10 @@ module.exports = async function handler(req, res) {
     }
 
     const data = await geminiRes.json();
+    const text = extractText(data);
+
     res.status(200).json({
-      text: data.output_text || "No pude generar una respuesta, intenta reformular tu pregunta.",
+      text: text || "No pude generar una respuesta, intenta reformular tu pregunta.",
       interactionId: data.id,
     });
   } catch (err) {
@@ -105,3 +108,17 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: "Error de conexión con el bot." });
   }
 };
+
+// La respuesta de la API viene como una lista de "steps" (pasos), no como
+// un solo texto plano. Buscamos el último paso de tipo "model_output" y
+// juntamos sus bloques de texto.
+function extractText(data) {
+  if (!data || !Array.isArray(data.steps)) return "";
+  const outputSteps = data.steps.filter((s) => s.type === "model_output");
+  const lastOutput = outputSteps[outputSteps.length - 1];
+  if (!lastOutput || !Array.isArray(lastOutput.content)) return "";
+  return lastOutput.content
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("");
+}
