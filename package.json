@@ -1,0 +1,9 @@
+{
+  "name": "orienta-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chatbot público sobre institutos, universidades, carreras y becas en Perú.",
+  "engines": {
+    "node": ">=18"
+  }
+}
