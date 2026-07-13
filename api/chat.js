@@ -3,7 +3,7 @@
 // El navegador nunca ve la API key: solo este servidor la usa.
 
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
-const MODEL = "gemini-3.1-flash-lite"; // 500 solicitudes/día gratis en tu cuenta, muy por encima de otras opciones
+const MODEL = "gemini-3.5-flash"; // cámbialo a "gemini-flash-lite-latest" si necesitas más cupo gratis por día
 
 // -----------------------------------------------------------------------
 // Aquí va el "conocimiento" del bot. Edita este texto con la info curada
@@ -29,11 +29,9 @@ Cómo respondes:
   vs. privada), sé neutral: da ventajas y desventajas de cada una, no
   impongas una sola respuesta correcta.
 - Para datos que cambian seguido (fechas de postulación, montos exactos de
-  becas, requisitos), usa la búsqueda en Google que tienes disponible para
-  verificar la info actual antes de responder. Si aun así no encuentras un
-  dato confiable, no inventes cifras: da el panorama general y recomienda
-  verificar en la fuente oficial (Pronabec, Sunedu, Minedu, o la página de
-  la institución).
+  becas, requisitos), no inventes cifras. Da el panorama general y siempre
+  recomienda verificar en la fuente oficial (Pronabec, Sunedu, Minedu, o la
+  página de la institución) antes de decidir algo importante.
 - Si preguntan algo fuera de este tema, redirige con amabilidad hacia tu
   propósito: ayudarles a decidir su camino después del colegio.
 - No reemplazas a un asesor vocacional certificado ni das asesoría legal o
@@ -69,7 +67,6 @@ module.exports = async function handler(req, res) {
     system_instruction: SYSTEM_PROMPT,
     input: message,
     generation_config: { temperature: 0.6 },
-    tools: [{ type: "google_search" }],
   };
   if (previousInteractionId) {
     payload.previous_interaction_id = previousInteractionId;
@@ -87,26 +84,24 @@ module.exports = async function handler(req, res) {
     });
 
     if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      console.error("Gemini error:", geminiRes.status, errText);
       if (geminiRes.status === 429) {
         res.status(429).json({
           error: "Muchas personas usando el bot ahora mismo. Intenta en un momento.",
         });
         return;
       }
+      const errText = await geminiRes.text();
+      console.error("Gemini error:", geminiRes.status, errText);
       res.status(502).json({ error: "El bot no pudo responder. Intenta de nuevo." });
       return;
     }
 
     const data = await geminiRes.json();
     const text = extractText(data);
-    const sources = extractSources(data);
 
     res.status(200).json({
       text: text || "No pude generar una respuesta, intenta reformular tu pregunta.",
       interactionId: data.id,
-      sources,
     });
   } catch (err) {
     console.error("Error llamando a Gemini:", err);
@@ -126,26 +121,4 @@ function extractText(data) {
     .filter((c) => c.type === "text")
     .map((c) => c.text)
     .join("");
-}
-
-// Cuando el bot busca en Google, el texto de la respuesta trae "annotations"
-// con los links de las páginas que usó. Los juntamos y quitamos duplicados.
-function extractSources(data) {
-  if (!data || !Array.isArray(data.steps)) return [];
-  const outputSteps = data.steps.filter((s) => s.type === "model_output");
-  const lastOutput = outputSteps[outputSteps.length - 1];
-  if (!lastOutput || !Array.isArray(lastOutput.content)) return [];
-
-  const seen = new Set();
-  const sources = [];
-  for (const block of lastOutput.content) {
-    if (!Array.isArray(block.annotations)) continue;
-    for (const a of block.annotations) {
-      if (a.uri && !seen.has(a.uri)) {
-        seen.add(a.uri);
-        sources.push({ uri: a.uri, title: a.title || a.uri });
-      }
-    }
-  }
-  return sources;
 }
